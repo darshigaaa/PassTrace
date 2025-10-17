@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PassTrace - Secure, Encrypted, One-Time Password Sharing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #d1d5db;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: #1f2937;
+            border-radius: 0.75rem;
+            border: 1px solid #374151;
+            padding: 2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .form-input, .form-select {
+            background-color: #374151;
+            border: 1px solid #4b5563;
+            color: #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .copy-btn {
+            background-color: #4b5563;
+            color: #d1d5db;
+        }
+        .copy-btn:hover {
+            background-color: #6b7280;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+        .fade-out {
+            animation: fadeOut 0.5s ease-in-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        .slide-in {
+             animation: slideIn 0.5s ease-in-out forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4">
+
+    <div class="container">
+        <header class="text-center mb-8">
+            <div class="inline-block bg-gray-700 p-3 rounded-full mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-white">PassTrace</h1>
+            <p class="text-gray-400 mt-1">Secure, encrypted, one-time password sharing</p>
+        </header>
+
+        <!-- Main View: Create Share Link -->
+        <main id="createView" class="card fade-in">
+            <form id="shareForm">
+                <div class="space-y-6">
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-300 mb-1">Password to Share</label>
+                        <input type="password" id="password" class="form-input" placeholder="Enter the password you want to share" required>
+                    </div>
+                    <div>
+                        <label for="note" class="block text-sm font-medium text-gray-300 mb-1">Note (Optional)</label>
+                        <textarea id="note" class="form-input" rows="2" placeholder="Add a message for the recipient"></textarea>
+                    </div>
+                    <div>
+                        <label for="expiry" class="block text-sm font-medium text-gray-300 mb-1">Auto-Expire After</label>
+                        <select id="expiry" class="form-select">
+                            <option value="300">5 minutes</option>
+                            <option value="900">15 minutes</option>
+                            <option value="1800">30 minutes</option>
+                            <option value="3600" selected>1 hour</option>
+                            <option value="10800">3 hours</option>
+                            <option value="86400">24 hours</option>
+                        </select>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg text-sm text-gray-400 space-y-2">
+                        <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> AES-256 encryption for password data</p>
+                        <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> RSA-2048 encryption for key exchange</p>
+                        <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> One-time view - self-destructs after opening</p>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                        </svg>
+                        Generate Secure Share Link
+                    </button>
+                </div>
+            </form>
+        </main>
+        
+        <!-- Secured View: Display Share Link and Key -->
+        <section id="securedView" class="card hidden">
+            <div class="text-center mb-6">
+                <div class="inline-block bg-green-500/10 p-3 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mt-4">Password Secured!</h2>
+                <p class="text-gray-400 mt-1">Share the link and private key with your recipient.</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Secure Share Link</label>
+                    <div class="flex gap-2">
+                        <input id="shareLink" type="text" class="form-input" readonly>
+                        <button onclick="copyToClipboard('shareLink', this)" class="btn copy-btn">Copy</button>
+                    </div>
+                </div>
+                 <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Private Decryption Key</label>
+                    <div class="flex gap-2">
+                        <input id="privateKey" type="text" class="form-input" readonly>
+                        <button onclick="copyToClipboard('privateKey', this)" class="btn copy-btn">Copy</button>
+                    </div>
+                    <p class="text-xs text-yellow-400 mt-2">The recipient MUST have this key to decrypt the password. Send it through a separate secure channel.</p>
+                </div>
+            </div>
+
+            <div class="mt-6 text-center text-sm text-gray-400 flex items-center justify-center">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 animate-spin" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                </svg>
+                <span id="expiryMessage"></span>
+            </div>
+
+            <div class="mt-6 border-t border-gray-700 pt-4">
+                 <div id="statusTracker">
+                    <p class="text-sm font-medium text-gray-300 mb-2">Live Status:</p>
+                    <div class="flex items-center space-x-2 text-gray-400">
+                        <span id="statusDot" class="status-dot bg-gray-500"></span>
+                        <span id="statusText">Waiting for recipient...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-8">
+                <button onclick="shareAnother()" class="btn btn-primary w-full">Share Another Password</button>
+            </div>
+        </section>
+
+        <!-- Recipient View: Enter Key to Decrypt -->
+        <section id="recipientView" class="card hidden">
+             <h2 class="text-2xl font-bold text-white text-center mb-4">Unlock Password</h2>
+             <p class="text-gray-400 text-center mb-6">Enter the private key you received to view the password.</p>
+             <form id="decryptForm">
+                <div class="space-y-4">
+                    <div>
+                        <label for="decryptionKey" class="block text-sm font-medium text-gray-300 mb-1">Private Decryption Key</label>
+                        <textarea id="decryptionKey" class="form-input" rows="4" placeholder="Paste the decryption key here" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" /></svg>
+                        Decrypt and View
+                    </button>
+                </div>
+             </form>
+        </section>
+
+        <!-- Revealed View: Display Decrypted Password -->
+        <section id="revealedView" class="card hidden">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Password Revealed</h2>
+                <p class="text-gray-400 mt-1">This password has been revealed and the share link is now destroyed.</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Decrypted Password</label>
+                    <div class="flex gap-2">
+                        <input id="decryptedPassword" type="text" class="form-input bg-gray-800" readonly>
+                        <button onclick="copyToClipboard('decryptedPassword', this)" class="btn copy-btn">Copy</button>
+                    </div>
+                </div>
+                <div id="decryptedNoteContainer" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300 mb-1">Original Note</label>
+                     <p id="decryptedNote" class="p-3 bg-gray-800 rounded-lg text-gray-300 whitespace-pre-wrap"></p>
+                </div>
+            </div>
+             <div class="mt-8">
+                <a href="/" class="btn btn-primary w-full">Create a New Secure Share</a>
+            </div>
+        </section>
+
+        <!-- Expired/Invalid View -->
+        <section id="expiredView" class="card hidden">
+             <div class="text-center">
+                <div class="inline-block bg-red-500/10 p-3 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mt-4">Link Expired or Invalid</h2>
+                <p class="text-gray-400 mt-2">This secure link has either expired or the password has already been viewed. For security, each link is valid for one-time use only.</p>
+                <div class="mt-6">
+                    <a href="/" class="btn btn-primary">Share a New Password</a>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // DOM Elements
+        const createView = document.getElementById('createView');
+        const securedView = document.getElementById('securedView');
+        const recipientView = document.getElementById('recipientView');
+        const revealedView = document.getElementById('revealedView');
+        const expiredView = document.getElementById('expiredView');
+
+        const shareForm = document.getElementById('shareForm');
+        const decryptForm = document.getElementById('decryptForm');
+
+        // --- Core Application Logic ---
+        
+        // Step 1: Initialize the application state based on the URL
+        window.onload = function() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#share=')) {
+                // This is a recipient link
+                const encryptedData = hash.substring(7); // remove '#share='
+                if(localStorage.getItem(encryptedData)){
+                    showView('recipientView');
+                } else {
+                    showView('expiredView');
+                }
+            } else {
+                showView('createView');
+            }
+        };
+
+        // Step 2: Handle the creation of a secure share link
+        shareForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            const note = document.getElementById('note').value;
+            const expiry = document.getElementById('expiry').value;
+
+            try {
+                // Client-side RSA key pair generation for encryption
+                const keyPair = await window.crypto.subtle.generateKey(
+                    {
+                        name: "RSA-OAEP",
+                        modulusLength: 2048,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: "SHA-256",
+                    },
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+
+                // Export keys to be shared. The private key is given to the user to share.
+                const privateKey = await exportKey(keyPair.privateKey);
+
+                // Generate a random AES key to encrypt the data
+                const aesKey = await window.crypto.subtle.generateKey(
+                    { name: "AES-GCM", length: 256 },
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+                const exportedAesKey = await exportKey(aesKey);
+
+                // Encrypt the AES key with the RSA public key.
+                // We use the actual CryptoKey object (keyPair.publicKey) for the operation.
+                const encryptedAesKey = await rsaEncrypt(keyPair.publicKey, JSON.stringify(exportedAesKey));
+
+                // Encrypt the password and note with the AES key
+                const dataToEncrypt = JSON.stringify({ password, note });
+                const { ciphertext, iv } = await aesEncrypt(aesKey, dataToEncrypt);
+                
+                // Prepare data for the share link and local storage
+                const shareId = generateRandomId();
+                const shareData = {
+                    iv: bufferToBase64(iv),
+                    encryptedData: bufferToBase64(ciphertext),
+                    encryptedKey: bufferToBase64(encryptedAesKey),
+                };
+
+                // In a real app, this would be sent to a server. Here we use localStorage to simulate persistence.
+                localStorage.setItem(shareId, JSON.stringify(shareData));
+                
+                // Create the shareable link
+                const shareLink = `${window.location.origin}${window.location.pathname}#share=${shareId}`;
+
+                // Display the secured view with the link and private key
+                document.getElementById('shareLink').value = shareLink;
+                document.getElementById('privateKey').value = JSON.stringify(privateKey);
+
+                // Set up auto-expiry
+                const expiryTime = Date.now() + (parseInt(expiry) * 1000);
+                localStorage.setItem(`expiry_${shareId}`, expiryTime);
+                startExpiryTimer(expiryTime);
+                
+                // Simulate real-time status updates
+                startStatusSimulation();
+
+                showView('securedView');
+
+            } catch (error) {
+                console.error("Encryption failed:", error);
+                alert("An error occurred during encryption. Please try again.");
+            }
+        });
+
+        // Step 3: Handle the decryption process by the recipient
+        decryptForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const decryptionKeyInput = document.getElementById('decryptionKey').value;
+            const shareId = window.location.hash.substring(7);
+            const storedData = JSON.parse(localStorage.getItem(shareId));
+
+            if (!storedData) {
+                showView('expiredView');
+                return;
+            }
+
+            try {
+                const privateKey = await importKey(JSON.parse(decryptionKeyInput), "private");
+                
+                // Decrypt the AES key using the RSA private key
+                const decryptedAesKeyData = await rsaDecrypt(privateKey, base64ToBuffer(storedData.encryptedKey));
+                const aesKeyJson = new TextDecoder().decode(decryptedAesKeyData);
+                const aesKey = await importKey(JSON.parse(aesKeyJson), "aes");
+                
+                // Decrypt the password data using the AES key
+                const decryptedData = await aesDecrypt(
+                    aesKey,
+                    base64ToBuffer(storedData.iv),
+                    base64ToBuffer(storedData.encryptedData)
+                );
+                const { password, note } = JSON.parse(new TextDecoder().decode(decryptedData));
+
+                // Display the revealed password and note
+                document.getElementById('decryptedPassword').value = password;
+                if (note) {
+                    document.getElementById('decryptedNote').textContent = note;
+                    document.getElementById('decryptedNoteContainer').classList.remove('hidden');
+                }
+                
+                // Self-destruct: remove the data from localStorage
+                localStorage.removeItem(shareId);
+                localStorage.removeItem(`expiry_${shareId}`);
+
+                showView('revealedView');
+
+            } catch (error) {
+                console.error("Decryption failed:", error);
+                alert("Decryption failed. The private key may be incorrect or the data may be corrupted.");
+            }
+        });
+        
+        // --- UI and Utility Functions ---
+
+        function showView(viewId) {
+            [createView, securedView, recipientView, revealedView, expiredView].forEach(view => {
+                if (view.id === viewId) {
+                    view.classList.remove('hidden', 'fade-out');
+                    view.classList.add('fade-in');
+                } else {
+                    view.classList.add('hidden');
+                }
+            });
+        }
+        
+        function shareAnother() {
+            window.location.href = window.location.origin + window.location.pathname;
+        }
+        
+        function copyToClipboard(elementId, button) {
+            const input = document.getElementById(elementId);
+            input.select();
+            input.setSelectionRange(0, 99999); 
+            
+            try {
+                document.execCommand('copy');
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                alert('Failed to copy text. Please copy it manually.');
+            }
+        }
+        
+        function startExpiryTimer(expiryTime) {
+            const expiryMessage = document.getElementById('expiryMessage');
+            const interval = setInterval(() => {
+                const remaining = expiryTime - Date.now();
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    expiryMessage.textContent = 'This link has expired.';
+                     // Auto-cleanup
+                    const shareId = window.location.hash.substring(7);
+                    if(shareId) {
+                       localStorage.removeItem(shareId);
+                       localStorage.removeItem(`expiry_${shareId}`);
+                    }
+                } else {
+                    const minutes = Math.floor((remaining / 1000) / 60);
+                    const seconds = Math.floor((remaining / 1000) % 60);
+                    expiryMessage.textContent = `Auto-expires in ${minutes}m ${seconds}s`;
+                }
+            }, 1000);
+        }
+
+        function startStatusSimulation() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+
+            statusText.textContent = "Delivered to recipient's browser ✅";
+            statusDot.classList.remove('bg-gray-500');
+            statusDot.classList.add('bg-green-500');
+
+            // Simulate "Opened" status when the recipient decrypts
+            // This would be a WebSocket event in a real app
+             const shareId = window.location.hash.substring(7);
+             const checkOpened = setInterval(() => {
+                if(!localStorage.getItem(shareId)){
+                    statusText.textContent = "Opened and self-destructed 🔒";
+                    statusDot.classList.remove('bg-green-500');
+                    statusDot.classList.add('bg-yellow-500');
+                    clearInterval(checkOpened);
+                }
+                 const expiryTime = localStorage.getItem(`expiry_${shareId}`);
+                 if(!expiryTime || Date.now() > parseInt(expiryTime)) {
+                     statusText.textContent = "Expired without being opened ⛔";
+                     statusDot.classList.remove('bg-green-500', 'bg-yellow-500');
+                     statusDot.classList.add('bg-red-500');
+                     clearInterval(checkOpened);
+                 }
+            }, 2000);
+        }
+
+        function generateRandomId() {
+            return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        }
+
+        // --- Web Crypto API Helper Functions ---
+        
+        async function exportKey(key) {
+            return await window.crypto.subtle.exportKey("jwk", key);
+        }
+
+        async function importKey(keyData, type) {
+            const usage = type === "private" ? ["decrypt"] : (type === "public" ? ["encrypt"] : ["encrypt", "decrypt"]);
+            const algorithm = type === "aes" ? { name: "AES-GCM" } : { name: "RSA-OAEP", hash: "SHA-256" };
+            return await window.crypto.subtle.importKey("jwk", keyData, algorithm, true, usage);
+        }
+        
+        async function rsaEncrypt(publicKey, data) {
+            const encodedData = new TextEncoder().encode(data);
+            return await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, encodedData);
+        }
+
+        async function rsaDecrypt(privateKey, data) {
+             return await window.crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, data);
+        }
+        
+        async function aesEncrypt(key, data) {
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encodedData = new TextEncoder().encode(data);
+            const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, encodedData);
+            return { ciphertext, iv };
+        }
+
+        async function aesDecrypt(key, iv, data) {
+            return await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, data);
+        }
+        
+        function bufferToBase64(buffer) {
+            return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+        }
+
+        function base64ToBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+    </script>
+
+</body>
+</html>
+
